@@ -1,0 +1,112 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+
+class NilClass
+  def blank?
+    true
+  end
+end
+
+class String
+  def blank?
+    self.empty?
+  end
+end
+
+def print_help(opts)
+  puts <<-HELP
+
+#{opts}
+
+VERSION 0.1
+
+  BUG : Not Support MAC
+
+Example
+exp_csv -uroot -ppwd -d dbname -s "SELECT id from table limit 5;"
+exp_csv -H localhost -uroot -ppwd -d dbname -s "SELECT id from table limit 5;" --output /tmp/aaa.csv -V
+exp_csv -uroot -ppwd -d dbname -s "SELECT id from table limit 5;" --output /tmp/aaa.csv -V -c GB2312
+exp_csv -uroot -ppwd -d dbname -f /tmp/1.sql --output /tmp/aaa.csv -V -c GB2312
+
+  HELP
+end
+
+options = Hash.new()
+opts = OptionParser.new() do |opts|
+  opts.on_tail("-h", "--help", "get help for this CMD") {
+    print_help(opts)
+    exit()
+  }
+  opts.on("-u", "--user String", "Database user") { |user|
+    options[:user] = user
+  }
+  opts.on("-d", "--db String", "Database name") { |db|
+    options[:db] = db
+  }
+  opts.on("-s", "--sql String", "Sql") { |sql|
+    options[:sql] = sql
+  }
+  opts.on("-p", "--password String", "Password") { |pwd|
+    options[:password] = pwd
+  }
+  opts.on("-o", "--output String", "Output file") { |file|
+    options[:file] = file
+  }
+  opts.on("-V", "--verbose", "") { |verbose|
+    options[:verbose] = true
+  }
+  opts.on("-c", "--charset String", "GB2312, GBK, UTF8") { |charset|
+    options[:charset] = charset
+  }
+  opts.on("-f", "--sql_file String", "sql file") { |sql_file|
+    options[:sql_file] = sql_file
+  }
+  opts.on("-H", "--host String", "dbhost") { |v|
+    options[:host] = v
+  }
+end
+opts.parse(ARGV)
+
+if options[:file].blank?
+  options[:file] = "/tmp/ext_csv_#{Time.now.to_f}.csv"
+end
+
+if options[:host].blank?
+  options[:host] = "localhost"
+end
+
+p options if options[:verbose]
+
+if options[:user].blank? || options[:db].blank?
+  print_help(opts)
+  exit()
+end
+
+if options[:sql_file].blank?
+  options[:sql_file] = "#{options[:file]}.sql"
+
+  File.open(options[:sql_file], 'w') do |f|
+    f.puts options[:sql]
+  end
+end
+
+cmd = <<-CMD
+  mysql -h#{options[:host]} --default-character-set=utf8 -u#{options[:user]} -p#{options[:password]} #{options[:db]} -B < #{options[:sql_file]} | sed 's/"/""/g' | sed  's/\t/","/g;s/^/"/;s/$/"/;' > #{options[:file]}
+CMD
+
+puts cmd if options[:verbose]
+`#{cmd}`
+
+if !options[:charset].blank?
+  options[:file_chartset] = "#{options[:file]}.#{options[:charset].downcase}.csv"
+
+  txt = File.read options[:file]
+  txt = txt.encode!("gbk", :undef => :replace, :replace => "?", :invalid => :replace)
+
+  File.open(options[:file_chartset], 'w') do |f|
+    f.puts txt
+  end
+end
+
+puts options[:file_chartset].blank? ? options[:file] : options[:file_chartset]
